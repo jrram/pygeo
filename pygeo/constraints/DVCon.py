@@ -1657,7 +1657,7 @@ class DVConstraints:
             conName, nSpan, nChord, coords, lower, upper, scaled, scale, self.DVGeometries[DVGeoName], addToPyOpt
         )
 
-def addAreaMomentsConstraints(
+    def addAreaMomentsConstraints(
         self,
         leList,
         teList,
@@ -1674,26 +1674,7 @@ def addAreaMomentsConstraints(
     ):
         r"""
         TODO: edit below 
-        Add a moment of area constraint to the wing. The volume
-        constraint is defined over a logically two-dimensional region
-        as shown below
-
-        .. code-block:: text
-
-          Planform view of the wing: The '+' are the (three dimensional)
-          points that are supplied in leList and teList.
-
-          Physical extent of wing
-                                   \
-          __________________________\_________
-          |                                  |
-          +--------------------------+       |
-          |   /      (Volume in here) \      |
-          | leList      teList         \     |
-          |                   \         \    |
-          +------------------------------+   |
-          |                                  |
-          |__________________________________/
+        Add a moment of area constraint to the wing.
 
         The region defined by the '----' boundary in the figure above
         will be meshed with nSpan x nChord points to form a 2D domain
@@ -1793,8 +1774,8 @@ def addAreaMomentsConstraints(
         coords = self._generateIntersections(leList, teList, nSpan, nChord, surfaceName)
         coords = coords.reshape((nSpan * nChord * 2, 3))
 
-        # Finally add the volume constraint object
-        self.constraints[typeName][conName] = VolumeConstraint(
+        # Finally add the moment of area constraint object
+        self.constraints[typeName][conName] = AreaMomentConstraints(
             conName, nSpan, nChord, coords, lower, upper, scaled, scale, self.DVGeometries[DVGeoName], addToPyOpt
         )
 

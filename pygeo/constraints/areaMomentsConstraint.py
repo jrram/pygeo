@@ -59,24 +59,17 @@ class AreaMomentsConstraint(GeometricConstraint):
         funcs[f"{self.name}_Iyy"] = Iyy
         funcs[f"{self.name}_Jz"] = Jz
 
-    # def evalFunctionsSens(self, funcsSens, config):
-    #     """
-    #     Evaluate the sensitivity of the functions this object has and
-    #     place in the funcsSens dictionary
+    def evalFunctionsSens(self, funcsSens, config):
+        """
+        Evaluate the sensitivity of the functions this object has and
+        place in the funcsSens dictionary
 
-    #     Parameters
-    #     ----------
-    #     funcsSens : dict
-    #         Dictionary to place function values
-    #     """
-    #     nDV = self.DVGeo.getNDV()
-    #     if nDV > 0:
-    #         dVdPt = self.evalVolumeSens()
-    #         if self.scaled:
-    #             dVdPt /= self.V0
-
-    #         # Now compute the DVGeo total sensitivity:
-    #         funcsSens[self.name] = self.DVGeo.totalSensitivity(dVdPt, self.name, config=config)
+        Parameters
+        ----------
+        funcsSens : dict
+            Dictionary to place function values
+        """
+        pass
 
     def evalAreaMoments(self):
         """
@@ -119,8 +112,8 @@ class AreaMomentsConstraint(GeometricConstraint):
                 # Calculate second moment of area of each strip
                 Ixx[i] += (dx * dy**3) / 12 + (yc - ya)**2 * dx * dy
                 Iyy[i] += (dx**3 * dy) / 12 + (xc - xa)**2 * dx * dy
-        # Calculate polar second moment of area
-        Jz[i] = Ixx + Iyy
+            # Calculate polar second moment of area
+            Jz[i] = Ixx + Iyy
 
         return Ixx, Iyy, Jz
 
@@ -155,6 +148,11 @@ class AreaMomentsConstraint(GeometricConstraint):
         individual ones are already written"""
         pass
 
+class dummyDVgeo:
+
+    def addPointSet(self, *args):
+        pass
+
 if __name__ == "__main__":
     print("Hello!")
     nSpan = 1
@@ -169,6 +167,6 @@ if __name__ == "__main__":
     upper = 1.e20
     scaled = False
     scale = 1.0
-    DVGeo = "IJ"
+    DVGeo = dummyDVgeo()
     addToPyOpt = True
     foil = AreaMomentsConstraint("foil", 1, 2, coords, lower, upper, scaled, scale, DVGeo, addToPyOpt)
