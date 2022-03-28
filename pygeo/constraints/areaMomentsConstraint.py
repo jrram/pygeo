@@ -2,8 +2,7 @@
 #         Imports
 # ======================================================================
 import numpy as np
-from baseConstraint import GeometricConstraint # TODO: had to remove dot for this to work; change it back
-
+from .baseConstraint import GeometricConstraint
 
 class AreaMomentsConstraint(GeometricConstraint):
     """
@@ -37,7 +36,7 @@ class AreaMomentsConstraint(GeometricConstraint):
         self.DVGeo.addPointSet(self.coords, self.name)
 
         # Now get the reference second moments of area
-        self.IJ0 = self.evalAreaMoments()
+        self.Ixx0, self.Iyy0, self.Jz0 = self.evalAreaMoments()
 
 # IJ should have three components: Ixx, Iyy, and J
 
@@ -54,72 +53,122 @@ class AreaMomentsConstraint(GeometricConstraint):
         self.coords = self.DVGeo.update(self.name, config=config)
         Ixx, Iyy, Jz = self.evalAreaMoments()
         if self.scaled:
-            IJ /= self.IJ0 # TODO: check division
+            Ixx = np.divide(Ixx, self.Ixx0)
+            Iyy = np.divide(Iyy, self.Iyy0)
+            Jz = np.divide(Jz, self.Jz0)
         funcs[f"{self.name}_Ixx"] = Ixx
         funcs[f"{self.name}_Iyy"] = Iyy
         funcs[f"{self.name}_Jz"] = Jz
 
-    def evalFunctionsSens(self, funcsSens, config):
-        """
-        Evaluate the sensitivity of the functions this object has and
-        place in the funcsSens dictionary
+    # def evalFunctionsSens(self, funcsSens, config):
+    #     """
+    #     Evaluate the sensitivity of the functions this object has and
+    #     place in the funcsSens dictionary
 
-        Parameters
-        ----------
-        funcsSens : dict
-            Dictionary to place function values
-        """
-        pass
+    #     Parameters
+    #     ----------
+    #     funcsSens : dict
+    #         Dictionary to place function values
+    #     """
+    #     nDV = self.DVGeo.getNDV()
+    #     if nDV > 0:
+    #         dVdPt = self.evalVolumeSens()
+    #         if self.scaled:
+    #             dVdPt /= self.V0
+
+    #         # Now compute the DVGeo total sensitivity:
+    #         funcsSens[self.name] = self.DVGeo.totalSensitivity(dVdPt, self.name, config=config)
 
     def evalAreaMoments(self):
         """
         Evaluate the second moments of area for each section
         """
-        #IJ = {} # TODO: could make these three into a dictionary of arrays with Ixx, etc key?
-        Ixx = np.zeros(self.nSpan - 1) # TODO check that size is correct
-        Iyy = np.zeros(self.nSpan - 1)
-        Jz = np.zeros(self.nSpan - 1) 
-        x = self.coords.reshape((self.nSpan, self.nChord, 2, 3))
-        for i in range(self.nSpan - 1):
+        #IJ = {} # TODO: could make these three into a dictionary of arrays iwth Ixx, etc lable?
+        Ixx = np.zeros(self.nSpan)
+        Iyy = np.zeros(self.nSpan)
+        Jz = np.zeros(self.nSpan)
+        # Reshape coordinates
+        coords = self.coords.reshape((self.nSpan, self.nChord, 2, 3))
+        # [] TODO JM-: For RAE2822 airfoil, I had to flip the top/bottom index (3rd index below) to get positive dy. Need to test again in box and other cases. Is there a consistent definition?
+        # Chordwise coordinate
+        x_bot = coords[:,:,1,0]
+        x_top = coords[:,:,0,0]
+        # Vertical coordinate
+        y_bot = coords[:,:,1,1]
+        y_top = coords[:,:,0,1]
 
-            # Compute centroid of airfoil
-            xa = 0
-            ya = 0
+        print(f"\nself.nSpan={self.nSpan}")
+        print(f"self.nChord={self.nChord}")
+        print(f"x_top = {x_top}")
+        print(f"x_bot = {x_bot}")
+        print(f"y_top = {y_top}")
+        print(f"y_bot = {y_bot}")
+
+        # Loop over each spanwise location
+        for i in range(self.nSpan):
+
+            # Airfoil centroid
+            xc = 0
+            yc = 0
+            # Airfoil area and chord
+            area = 0
+            chord = 0
+
+            # Loop over chordwise indices for current airfoil
             for j in range(self.nChord - 1):
-                # Add centroid of each strip
-                xa += 0.5 * (x[i, j+1, 0] + x[i, j, 0])
-                ya += 0.5 * (x[i, j, 1] + x[i, j, 0])
-            # Divide totals by number of strips to get average
-            xa /= self.nChord - 1 # TODO: check number
-            ya /= self.nChord - 1 # TODO: check number
 
-            # Compute second moments of area of airfoil  
-            for j in range(self.nChord - 1):
+                # Rectangular strip with midpoint values
+                ## Sides
+                dx = x_bot[i,j+1] - x_bot[i,j]
+                chord += dx
+                assert dx > 0, "dx is not positive!"
+                assert dx == x_top[i,j+1] - x_top[i,j], "dx not same on top and bottom!"
+                ## y coordinate in middle top of rectangle
+                y_rect_top = (y_top[i,j] + y_top[i,j+1]) / 2
+                # y coordinate in middle bottom of rectangle
+                y_rect_bot = (y_bot[i,j] + y_bot[i,j+1]) / 2
+                # Height of rectangle
+                dy_rect = y_rect_top - y_rect_bot
+                assert dy_rect > 0, "dy_rect is not positive!"
+                # Area of rectangular strip
+                area_rect = dx * dy_rect
+                area += area_rect
+                # Centroid of rectangular strip
+                xc_rect = x_bot[i,j] + dx/2
+                yc_rect = y_rect_bot + dy_rect/2
+                # Add centroid of rectangular strip
+                xc += xc_rect * area_rect
+                yc += yc_rect * area_rect
+                # Second moments of area about global coordinates
+                Ixx[i] += (dx * dy_rect**3) / 12 + area_rect * yc_rect**2
+                Iyy[i] += (dx**3 * dy_rect) / 12 + area_rect * xc_rect**2
 
-                # Calculate width, height and centroid of current strip
-                dx = x[i, j+1, 0] - x[i, j, 0]
-                dy = x[i, j, 1] - x[i, j, 0]
-                xc = 0.5 * (x[i, j+1, 0] + x[i, j, 0]) # TODO: store these from previous xc, yc computation?
-                yc = 0.5 * (x[i, j, 1] + x[i, j, 0])
+                # # Drela's version of torsional rigidity
+                Jz[i] += dy_rect**3 * dx / 3
+                
+            # End chordwise loop
 
-                # Debuggin; Checks prints
-                # Are dx and dy equal on both sides as assumed?
-                print("dx:", dx, "=?", x[i, j+1, 1] - x[i, j, 1])
-                print("dy:", yx, "=?", x[i, j+1, 1] - x[i, j+1, 0])
+            # Compute centroid
+            xc /= area
+            yc /= area
+            # Convert moments of area to be relative to airfoil centroid
+            Ixx[i] -= area * yc**2
+            Iyy[i] -= area * xc**2
 
-                # Debugging: Write data for each strip
+            # Approximate torsional rigidity based on one rectangular strip
+            # t_avg = area / chord
+            # Jz[i] = chord * t_avg**3 / 3
 
-                # Calculate second moment of area of each strip
-                Ixx[i] += (dx * dy**3) / 12 + (yc - ya)**2 * dx * dy
-                Iyy[i] += (dx**3 * dy) / 12 + (xc - xa)**2 * dx * dy
-            # Calculate polar second moment of area
-            Jz[i] = Ixx + Iyy
+            print(f"\nArea = {area:.6e}, \nChord = {chord:.6e}")
+            print(f"Centroid = {xc:.6}, {yc:.6}")
+            print(f"i={i:3d}, Ixx={Ixx[i]:.6e}, Iyy={Iyy[i]:.6e}, Jz={Jz[i]:.6e}")
 
+        # End spanwise loop
         return Ixx, Iyy, Jz
 
-    # def evalVolumeSens(self):
+    # def evalAreaMomentsSens(self):
     #     """
-    #     Evaluate the derivative of the volume with respect to the
+    #     Evaluate the derivative of the moments of area with respect to the
     #     coordinates
     #     """
 
@@ -141,32 +190,53 @@ class AreaMomentsConstraint(GeometricConstraint):
     #         a particular configuration.
     #     """
 
-
-    
     def writeTecplot(self, handle):
         """No need to write the composite volume since each of the
         individual ones are already written"""
         pass
 
-class dummyDVgeo:
-
-    def addPointSet(self, *args):
-        pass
-
 if __name__ == "__main__":
-    print("Hello!")
-    nSpan = 1
-    nChord = 2
-    x = np.zeros([nSpan, nChord, 2, 3]) # nSpan, nChord, top/botom, xyz indices (x=0, y=1)
-    x[0,0,0,:] = np.array([0,0,0]) # bottom left corner
-    x[0,1,0,:] = np.array([1,0,0]) # bottom right corner
-    x[0,0,1,:] = np.array([0,1,0]) # top left corner
-    x[0,1,1,:] = np.array([1,1,0]) # top right corner
-    coords = x.reshape((nSpan * nChord * 2, 3))
-    lower = -1.e20
-    upper = 1.e20
-    scaled = False
-    scale = 1.0
-    DVGeo = dummyDVgeo()
-    addToPyOpt = True
-    foil = AreaMomentsConstraint("foil", 1, 2, coords, lower, upper, scaled, scale, DVGeo, addToPyOpt)
+
+    print("Testing area moments...")
+
+    # Simple rectangle
+    print('\nTest 1: One rectangle')
+    #coords = self.coords.reshape((self.nSpan, self.nChord, 2, 3))
+    coords = np.zeros([1, 2, 2, 3])
+    print(coords[0,0,0,:].shape)
+    coords[0,0,0,:] = [1,2,0]
+    coords[0,1,0,:] = [3,2,0]
+    coords[0,0,1,:] = [1,6,0]
+    coords[0,1,1,:] = [3,6,0]
+    acon = AreaMomentsConstraint('acon', 1,2,coords) #,0,0,False,1,None,False)
+    #acon.evalFunctions()
+    Ixx, Iyy, Jz = acon.evalAreaMoments()
+    print(Ixx, Iyy, Jz)
+
+    # One rectangle plus triangles
+    print('\nTest 2: One rectangle plus triangles')
+    coords = np.zeros([1, 2, 2, 3])
+    #print(coords[0,0,0,:].shape)
+    coords[0,0,0,:] = [1,2,0]
+    coords[0,1,0,:] = [3,1.5,0]
+    coords[0,0,1,:] = [1,6,0]
+    coords[0,1,1,:] = [3,6.5,0]
+    acon = AreaMomentsConstraint('acon', 1,2,coords) #,0,0,False,1,None,False)
+    #acon.evalFunctions()
+    Ixx, Iyy, Jz = acon.evalAreaMoments()
+    print(Ixx, Iyy, Jz)
+
+    # Two rectangles plus triangles
+    print('\nTest 3: Two rectangles plus triangles')
+    coords = np.zeros([1, 3, 2, 3])
+    #print(coords[0,0,0,:].shape)
+    coords[0,0,0,:] = [1,2,0]
+    coords[0,1,0,:] = [3,1.5,0]
+    coords[0,2,0,:] = [5,2,0]
+    coords[0,0,1,:] = [1,6,0]
+    coords[0,1,1,:] = [3,6.5,0]
+    coords[0,2,1,:] = [5,6,0]
+    acon = AreaMomentsConstraint('acon', 1, 3, coords) #,0,0,False,1,None,False)
+    #acon.evalFunctions()
+    Ixx, Iyy, Jz = acon.evalAreaMoments()
+    print(Ixx, Iyy, Jz)

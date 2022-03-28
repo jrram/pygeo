@@ -144,6 +144,11 @@ class RegTestPyGeo(unittest.TestCase):
         elif geometry == "rae2822":
             ffdFile = os.path.join(self.base_path, "../../input_files/deform_geometry_ffd.xyz")
             xFraction = 0.25
+        elif geometry == "rae2822_airfoil":
+            meshFile = os.path.join(self.base_path, "../../input_files/rae_2822.stl")
+            ffdFile = os.path.join(self.base_path, "../../input_files/rae_2822_ffd.xyz")
+            xFraction = 0.25
+            meshScale = 1
 
         DVGeo = DVGeometry(ffdFile, child=self.child)
         DVCon = DVConstraints()
@@ -368,6 +373,42 @@ class RegTestPyGeo(unittest.TestCase):
             handler.assert_allclose(
                 funcs["DVCon1_volume_constraint_0"], 4.0 * np.ones(1), name="volume_base", rtol=1e-7, atol=1e-7
             )
+
+    def test_area_moments_box(self, train=False, refDeriv=False):
+        refFile = os.path.join(self.base_path, "ref/test_DVConstraints_volume_box.ref")
+        with BaseRegTest(refFile, train=train) as handler:
+            DVGeo, DVCon = self.generate_dvgeo_dvcon("box")
+
+            # this projects in the z direction which is of dimension 8
+            # 1x0.5x8 = 4
+            leList = [[-0.5, 0, 0.1], [-0.5, 0, 7.9]]
+            teList = [[0.5, 0, 0.1], [0.5, 0, 7.9]]
+
+            DVCon.addAreaMomentConstraint(leList, teList, 4, 4, scaled=False)
+
+            #funcs, funcsSens = generic_test_base(DVGeo, DVCon, handler)
+            # Check that unscaled volume is computed correctly at baseline
+            #handler.assert_allclose(
+            #    funcs["DVCon1_volume_constraint_0"], 4.0 * np.ones(1), name="volume_base", #rtol=1e-7, atol=1e-7
+            #)
+
+    def test_area_moments_rae2822(self, train=False, refDeriv=False):
+        refFile = os.path.join(self.base_path, "ref/test_DVConstraints_volume_box.ref")
+        with BaseRegTest(refFile, train=train) as handler:
+            DVGeo, DVCon = self.generate_dvgeo_dvcon("rae2822_airfoil") # options: box, rae2822_airfoil
+
+            # this projects in the z direction
+            tol = 1E-6
+            leList = [[tol, 0, tol], [tol, 0, 1-tol]]
+            teList = [[1-tol, 0, tol], [1-tol, 0, 1-tol]]
+
+            DVCon.addAreaMomentConstraint(leList, teList, 2, 400, scaled=False)
+
+            #funcs, funcsSens = generic_test_base(DVGeo, DVCon, handler)
+            # Check that unscaled volume is computed correctly at baseline
+            #handler.assert_allclose(
+            #    funcs["DVCon1_volume_constraint_0"], 4.0 * np.ones(1), name="volume_base", #rtol=1e-7, atol=1e-7
+            #)
 
     def test_LeTe(self, train=False, refDeriv=False):
         """

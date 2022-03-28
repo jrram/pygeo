@@ -17,6 +17,7 @@ from .gearPostConstraint import GearPostConstraint
 from .circularityConstraint import CircularityConstraint
 from .planarityConstraint import PlanarityConstraint
 from .curvatureConstraint import CurvatureConstraint, CurvatureConstraint1D
+from .areaMomentsConstraint import AreaMomentsConstraint
 from ..geo_utils.misc import convertTo2D
 
 
@@ -1778,6 +1779,120 @@ class DVConstraints:
         self.constraints[typeName][conName] = AreaMomentConstraints(
             conName, nSpan, nChord, coords, lower, upper, scaled, scale, self.DVGeometries[DVGeoName], addToPyOpt
         )
+
+
+    def addAreaMomentConstraint(
+            self,
+            leList,
+            teList,
+            nSpan,
+            nChord,
+            lower=1.0,
+            upper=3.0,
+            scaled=True,
+            scale=1.0,
+            name=None,
+            addToPyOpt=True,
+            surfaceName="default",
+            DVGeoName="default",
+        ):
+            r"""
+            Add a moments of area constraint to the wing....
+
+            Parameters
+            ----------
+            leList : list or array
+                A list or array of points (size should be (Nx3) where N is
+                at least 2) defining the 'leading edge' or the start of the
+                domain
+
+            teList : list or array
+                Same as leList but for the trailing edge.
+
+            nSpan : int
+                The number of thickness constraints to be (linear)
+                interpolated *along* the leading and trailing edges
+
+            nChord : int
+                The number of thickness constraints to be (linearly)
+                interpolated between the leading and trailing edges
+
+            lower : float
+                The lower bound for the volume constraint.
+
+            upper : float
+                The upper bound for the volume constraint.
+
+            scaled : bool
+                Flag specifying whether or not the constraint is to be
+                implemented in a scaled fashion or not.
+
+                * scaled=True: The initial volume is defined to be 1.0.
+                In this case, the lower and upper bounds are given in
+                multiple of the initial volume. lower=0.85, upper=1.15,
+                would allow for 15% change in volume both upper and
+                lower. For aerodynamic optimization, this is the most
+                widely used option .
+
+                * scaled=False: No scaling is applied and the physical
+                volume. lower and upper refer to the physical volumes.
+
+            scale : float
+                This is the optimization scaling of the
+                constraint. Typically this parameter will not need to be
+                changed. If scaled=True, this automatically results in a
+                well-scaled constraint and scale can be left at 1.0. If
+                scaled=False, it may changed to a more suitable value of
+                the resulting phyical volume magnitude is vastly different
+                from O(1).
+
+            name : str
+                Normally this does not need to be set; a default name will
+                be generated automatically. Only use this if you have
+                multiple DVCon objects and the constriant names need to
+                be distinguished **OR** you are using this volume
+                computation for something other than a direct constraint
+                in pyOpt, i.e. it is required for a subsequent
+                computation.
+
+            addToPyOpt : bool
+                Normally this should be left at the default of True if the
+                volume is to be used as a constraint. If the volume is to
+                used in a subsequent calculation and not a constraint
+                directly, addToPyOpt should be False, and name
+                specified to a logical name for this computation. with
+                addToPyOpt=False, the lower, upper and scale variables are
+                meaningless
+
+            surfaceName : str
+                Name of the surface to project to. This should be the same
+                as the surfaceName provided when setSurface() was called.
+                For backward compatibility, the name is 'default' by default.
+
+            DVGeoName : str
+                Name of the DVGeo object to compute the constraint with. You only
+                need to set this if you're using multiple DVGeo objects
+                for a problem. For backward compatibility, the name is 'default' by default
+                """
+            self._checkDVGeo(DVGeoName)
+
+            typeName = "areaMomentCon"
+            if typeName not in self.constraints:
+                self.constraints[typeName] = OrderedDict()
+
+            if name is None:
+                conName = "%s_area_moment_constraint_%d" % (self.name, len(self.constraints[typeName]))
+            else:
+                conName = name
+
+            coords = self._generateIntersections(leList, teList, nSpan, nChord, surfaceName)
+            coords = coords.reshape((nSpan * nChord * 2, 3))
+
+            # Finally add the volume constraint object
+            self.constraints[typeName][conName] = AreaMomentsConstraint(
+                conName, nSpan, nChord, coords, lower, upper, scaled, scale, self.DVGeometries[DVGeoName], addToPyOpt
+            )
+
 
     def addCompositeVolumeConstraint(
         self, vols, lower=1.0, upper=3.0, scaled=True, scale=1.0, name=None, addToPyOpt=True, DVGeoName="default"
